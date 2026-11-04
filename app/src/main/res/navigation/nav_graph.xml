@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<navigation
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
     app:startDestination="@id/mapFragment">
 
     <fragment
         android:id="@+id/mapFragment"
         android:name="hu.nje.budapestexplorer.MapFragment"
-        android:label="Térkép"
-        tools:layout="@layout/fragment_map">
+        android:label="Térkép">
 
         <action
             android:id="@+id/action_mapFragment_to_profileFragment"
@@ -20,12 +17,27 @@
     <fragment
         android:id="@+id/profileFragment"
         android:name="hu.nje.budapestexplorer.ProfileFragment"
-        android:label="Profil"
-        tools:layout="@layout/fragment_profile">
+        android:label="Profil">
 
         <action
             android:id="@+id/action_profileFragment_to_mapFragment"
             app:destination="@id/mapFragment" />
+
+        <action
+            android:id="@+id/action_profileFragment_to_streetDetailFragment"
+            app:destination="@id/streetDetailFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/streetDetailFragment"
+        android:name="hu.nje.budapestexplorer.StreetDetailFragment"
+        android:label="Utca részletei">
+
+        <action
+            android:id="@+id/action_streetDetailFragment_to_profileFragment"
+            app:destination="@id/profileFragment" />
     </fragment>
 
 </navigation>
+
+
