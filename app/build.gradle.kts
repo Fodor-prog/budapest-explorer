@@ -4,6 +4,7 @@ plugins {
 
 android {
     namespace = "hu.nje.budapestexplorer"
+
     compileSdk {
         version = release(37)
     }
@@ -22,7 +23,11 @@ android {
         release {
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                packageScope = setOf(
+                    "androidx.**",
+                    "kotlin.**",
+                    "kotlinx.**"
+                )
             }
         }
     }
@@ -41,7 +46,12 @@ dependencies {
 
     implementation("androidx.navigation:navigation-fragment:2.7.7")
     implementation("androidx.navigation:navigation-ui:2.7.7")
+
     implementation("org.maplibre.gl:android-sdk:13.7.1")
+
+    // Room adatbázis Java-projekthez
+    implementation("androidx.room:room-runtime:2.8.5")
+    annotationProcessor("androidx.room:room-compiler:2.8.5")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)

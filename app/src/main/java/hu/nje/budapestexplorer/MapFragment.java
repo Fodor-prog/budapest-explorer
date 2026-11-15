@@ -21,22 +21,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Lifecycle;
 
 import org.maplibre.android.MapLibre;
 import org.maplibre.android.camera.CameraPosition;
 import org.maplibre.android.geometry.LatLng;
 import org.maplibre.android.maps.MapLibreMap;
 import org.maplibre.android.maps.MapView;
+import org.maplibre.android.maps.Style;
 import org.maplibre.android.style.layers.CircleLayer;
 import org.maplibre.android.style.layers.LineLayer;
 import org.maplibre.android.style.layers.PropertyFactory;
 import org.maplibre.android.style.sources.GeoJsonSource;
-import org.maplibre.android.maps.Style;
 import org.maplibre.geojson.Feature;
 import org.maplibre.geojson.FeatureCollection;
 import org.maplibre.geojson.LineString;
 import org.maplibre.geojson.Point;
-import org.maplibre.android.style.layers.PropertyFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +61,7 @@ public class MapFragment extends Fragment {
     private GeoJsonSource pointsSource;
     private GeoJsonSource routeSource;
     private LocationManager locationManager;
+    private WalkRepository walkRepository;
 
     private Button startButton;
     private Button stopButton;
@@ -69,6 +70,8 @@ public class MapFragment extends Fragment {
     private TextView latestCoordinates;
 
     private boolean isTracking = false;
+    private boolean isCreatingWalk = false;
+    private long activeWalkId = -1L;
 
     private final ActivityResultLauncher<String[]> locationPermissionLauncher =
             registerForActivityResult(
@@ -81,6 +84,15 @@ public class MapFragment extends Fragment {
         public void onLocationChanged(@NonNull Location location) {
             Location savedLocation = new Location(location);
             recordedLocations.add(savedLocation);
+
+            if (walkRepository != null && activeWalkId >= 0) {
+                walkRepository.addGpsPoint(
+                        activeWalkId,
+                        savedLocation.getLatitude(),
+                        savedLocation.getLongitude(),
+                        savedLocation.getTime()
+                );
+            }
 
             updateLocationTexts(savedLocation);
             updateMapWithRecordedLocations();
@@ -156,10 +168,13 @@ public class MapFragment extends Fragment {
         locationManager = (LocationManager) requireContext()
                 .getSystemService(Context.LOCATION_SERVICE);
 
+        walkRepository = new WalkRepository(requireContext());
+
         startButton.setOnClickListener(button -> requestLocationPermission());
         stopButton.setOnClickListener(button -> stopWalk());
 
         updatePointCount();
+        updateButtonStates();
 
         mapView.getMapAsync(map -> {
             if (!isAdded() || mapView == null) {
@@ -230,6 +245,37 @@ public class MapFragment extends Fragment {
             return;
         }
 
+        if (walkRepository == null || isTracking || isCreatingWalk) {
+            return;
+        }
+
+        isCreatingWalk = true;
+        trackingStatus.setText("Séta előkészítése...");
+        updateButtonStates();
+
+        walkRepository.createWalk(
+                System.currentTimeMillis(),
+                walkId -> {
+                    isCreatingWalk = false;
+
+                    if (!isAdded()
+                            || !getLifecycle().getCurrentState()
+                            .isAtLeast(Lifecycle.State.STARTED)) {
+                        walkRepository.finishWalk(
+                                walkId,
+                                System.currentTimeMillis()
+                        );
+                        updateButtonStates();
+                        return;
+                    }
+
+                    activeWalkId = walkId;
+                    startGpsUpdates();
+                }
+        );
+    }
+
+    private void startGpsUpdates() {
         clearPreviousRoute();
         recordedLocations.clear();
         updatePointCount();
@@ -248,6 +294,7 @@ public class MapFragment extends Fragment {
 
         } catch (SecurityException exception) {
             isTracking = false;
+            finishActiveWalk();
             trackingStatus.setText("A GPS-engedély nem érhető el.");
 
             Toast.makeText(
@@ -262,11 +309,23 @@ public class MapFragment extends Fragment {
 
     private void stopWalk() {
         stopLocationUpdates();
+        finishActiveWalk();
 
         trackingStatus.setText(
                 "A séta rögzítése leállt. A rögzített pontok: "
                         + recordedLocations.size()
         );
+    }
+
+    private void finishActiveWalk() {
+        if (walkRepository != null && activeWalkId >= 0) {
+            walkRepository.finishWalk(
+                    activeWalkId,
+                    System.currentTimeMillis()
+            );
+
+            activeWalkId = -1L;
+        }
     }
 
     private void stopLocationUpdates() {
@@ -280,7 +339,7 @@ public class MapFragment extends Fragment {
 
     private void updateButtonStates() {
         if (startButton != null) {
-            startButton.setEnabled(!isTracking);
+            startButton.setEnabled(!isTracking && !isCreatingWalk);
         }
 
         if (stopButton != null) {
@@ -457,6 +516,7 @@ public class MapFragment extends Fragment {
     public void onStop() {
         if (isTracking) {
             stopLocationUpdates();
+            finishActiveWalk();
 
             if (trackingStatus != null) {
                 trackingStatus.setText(
@@ -493,6 +553,7 @@ public class MapFragment extends Fragment {
     @Override
     public void onDestroyView() {
         stopLocationUpdates();
+        finishActiveWalk();
 
         if (mapView != null) {
             mapView.onDestroy();
@@ -510,9 +571,8 @@ public class MapFragment extends Fragment {
         pointCount = null;
         latestCoordinates = null;
         locationManager = null;
+        walkRepository = null;
 
         super.onDestroyView();
     }
 }
-
-
