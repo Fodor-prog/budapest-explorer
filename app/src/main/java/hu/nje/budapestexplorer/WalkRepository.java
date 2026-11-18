@@ -24,11 +24,12 @@ public class WalkRepository {
 
     public void createWalk(
             long startedAtMillis,
+            Long userId,
             Consumer<Long> onWalkCreated
     ) {
         databaseExecutor.execute(() -> {
             long walkId = database.walkDao().insert(
-                    new WalkEntity(startedAtMillis)
+                    new WalkEntity(startedAtMillis, userId)
             );
 
             mainThreadHandler.post(() ->
@@ -73,6 +74,20 @@ public class WalkRepository {
         databaseExecutor.execute(() -> {
             List<WalkEntity> walks =
                     database.walkDao().getAllWalks();
+
+            mainThreadHandler.post(() ->
+                    onWalksLoaded.accept(walks)
+            );
+        });
+    }
+
+    public void getWalksForUser(
+            Long userId,
+            Consumer<List<WalkEntity>> onWalksLoaded
+    ) {
+        databaseExecutor.execute(() -> {
+            List<WalkEntity> walks =
+                    database.walkDao().getWalksForUser(userId);
 
             mainThreadHandler.post(() ->
                     onWalksLoaded.accept(walks)

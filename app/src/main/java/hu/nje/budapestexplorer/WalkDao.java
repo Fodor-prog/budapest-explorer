@@ -24,4 +24,12 @@ public interface WalkDao {
                     "ORDER BY startedAtMillis DESC"
     )
     List<WalkEntity> getAllWalks();
+
+    @Query(
+            "SELECT * FROM walks " +
+                    "WHERE (:userId IS NULL AND userId IS NULL) " +
+                    "OR userId = :userId " +
+                    "ORDER BY startedAtMillis DESC"
+    )
+    List<WalkEntity> getWalksForUser(Long userId);
 }

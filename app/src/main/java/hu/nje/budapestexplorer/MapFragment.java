@@ -45,6 +45,8 @@ import java.util.Map;
 
 public class MapFragment extends Fragment {
 
+    public static final String ARG_WALK_ID = "walkId";
+
     private static final String MAP_STYLE_URL =
             "https://tiles.openfreemap.org/styles/liberty";
 
@@ -62,6 +64,7 @@ public class MapFragment extends Fragment {
     private GeoJsonSource routeSource;
     private LocationManager locationManager;
     private WalkRepository walkRepository;
+    private UserRepository userRepository;
 
     private Button startButton;
     private Button stopButton;
@@ -71,6 +74,7 @@ public class MapFragment extends Fragment {
 
     private boolean isTracking = false;
     private boolean isCreatingWalk = false;
+    private boolean isViewingSavedWalk = false;
     private long activeWalkId = -1L;
 
     private final ActivityResultLauncher<String[]> locationPermissionLauncher =
@@ -169,12 +173,21 @@ public class MapFragment extends Fragment {
                 .getSystemService(Context.LOCATION_SERVICE);
 
         walkRepository = new WalkRepository(requireContext());
+        userRepository = new UserRepository(requireContext());
+
+        Bundle arguments = getArguments();
+        isViewingSavedWalk = arguments != null
+                && arguments.containsKey(ARG_WALK_ID);
 
         startButton.setOnClickListener(button -> requestLocationPermission());
         stopButton.setOnClickListener(button -> stopWalk());
 
         updatePointCount();
         updateButtonStates();
+
+        if (isViewingSavedWalk) {
+            trackingStatus.setText("Mentett séta útvonalának betöltése...");
+        }
 
         mapView.getMapAsync(map -> {
             if (!isAdded() || mapView == null) {
@@ -197,7 +210,11 @@ public class MapFragment extends Fragment {
                                 .build()
                 );
 
-                updateMapWithRecordedLocations();
+                if (isViewingSavedWalk) {
+                    loadSavedWalkOnMap();
+                } else {
+                    updateMapWithRecordedLocations();
+                }
             });
         });
     }
@@ -249,19 +266,31 @@ public class MapFragment extends Fragment {
             return;
         }
 
+        WalkRepository repository = walkRepository;
+
+        Long userId = null;
+        if (userRepository != null) {
+            long loggedInUserId = userRepository.getLoggedInUserId();
+
+            if (loggedInUserId >= 0) {
+                userId = loggedInUserId;
+            }
+        }
+
         isCreatingWalk = true;
         trackingStatus.setText("Séta előkészítése...");
         updateButtonStates();
 
-        walkRepository.createWalk(
+        repository.createWalk(
                 System.currentTimeMillis(),
+                userId,
                 walkId -> {
                     isCreatingWalk = false;
 
                     if (!isAdded()
                             || !getLifecycle().getCurrentState()
                             .isAtLeast(Lifecycle.State.STARTED)) {
-                        walkRepository.finishWalk(
+                        repository.finishWalk(
                                 walkId,
                                 System.currentTimeMillis()
                         );
@@ -270,6 +299,7 @@ public class MapFragment extends Fragment {
                     }
 
                     activeWalkId = walkId;
+                    isViewingSavedWalk = false;
                     startGpsUpdates();
                 }
         );
@@ -356,12 +386,11 @@ public class MapFragment extends Fragment {
             trackingStatus.setText("Séta rögzítése folyamatban...");
         }
 
-        if (pointCount != null) {
-            pointCount.setText(
-                    "Rögzített GPS-pontok: " + recordedLocations.size()
-            );
-        }
+        updatePointCount();
+        updateCoordinatesText(location);
+    }
 
+    private void updateCoordinatesText(Location location) {
         if (latestCoordinates != null) {
             latestCoordinates.setText(
                     String.format(
@@ -380,6 +409,69 @@ public class MapFragment extends Fragment {
                     "Rögzített GPS-pontok: " + recordedLocations.size()
             );
         }
+    }
+
+    private void loadSavedWalkOnMap() {
+        Bundle arguments = getArguments();
+
+        if (arguments == null || walkRepository == null) {
+            trackingStatus.setText("Nem található a mentett séta.");
+            return;
+        }
+
+        long walkId = arguments.getLong(ARG_WALK_ID, -1L);
+
+        if (walkId < 0) {
+            trackingStatus.setText("Érvénytelen sétaazonosító.");
+            return;
+        }
+
+        walkRepository.getPointsForWalk(walkId, points -> {
+            if (!isAdded() || mapView == null) {
+                return;
+            }
+
+            recordedLocations.clear();
+
+            if (points != null) {
+                for (GpsPointEntity savedPoint : points) {
+                    Location location = new Location("saved_walk");
+                    location.setLatitude(savedPoint.latitude);
+                    location.setLongitude(savedPoint.longitude);
+                    location.setTime(savedPoint.recordedAtMillis);
+                    recordedLocations.add(location);
+                }
+            }
+
+            updatePointCount();
+
+            if (recordedLocations.isEmpty()) {
+                trackingStatus.setText(
+                        "Ehhez a sétához nem tartozik GPS-pont."
+                );
+                return;
+            }
+
+            Location lastLocation =
+                    recordedLocations.get(recordedLocations.size() - 1);
+
+            updateCoordinatesText(lastLocation);
+
+            if (mapLibreMap != null) {
+                mapLibreMap.setCameraPosition(
+                        new CameraPosition.Builder()
+                                .target(new LatLng(
+                                        lastLocation.getLatitude(),
+                                        lastLocation.getLongitude()
+                                ))
+                                .zoom(14)
+                                .build()
+                );
+            }
+
+            trackingStatus.setText("Mentett séta útvonala");
+            updateMapWithRecordedLocations();
+        });
     }
 
     private void updateMapWithRecordedLocations() {
@@ -572,6 +664,7 @@ public class MapFragment extends Fragment {
         latestCoordinates = null;
         locationManager = null;
         walkRepository = null;
+        userRepository = null;
 
         super.onDestroyView();
     }

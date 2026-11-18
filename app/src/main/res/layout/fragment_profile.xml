@@ -54,6 +54,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/button_open_login" />
 
+    <Button
+        android:id="@+id/button_logout"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Kijelentkezés"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/button_open_register" />
+
     <TextView
         android:id="@+id/textSavedWalksTitle"
         android:layout_width="0dp"
@@ -65,7 +76,7 @@
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/button_open_register" />
+        app:layout_constraintTop_toBottomOf="@id/button_logout" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerWalks"

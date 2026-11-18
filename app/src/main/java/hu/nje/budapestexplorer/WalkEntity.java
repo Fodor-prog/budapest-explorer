@@ -1,9 +1,15 @@
 package hu.nje.budapestexplorer;
 
 import androidx.room.Entity;
+import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
-@Entity(tableName = "walks")
+@Entity(
+        tableName = "walks",
+        indices = {
+                @Index(value = {"userId"})
+        }
+)
 public class WalkEntity {
 
     @PrimaryKey(autoGenerate = true)
@@ -13,8 +19,14 @@ public class WalkEntity {
 
     public Long endedAtMillis;
 
-    public WalkEntity(long startedAtMillis) {
+    public Long userId;
+
+    public WalkEntity(
+            long startedAtMillis,
+            Long userId
+    ) {
         this.startedAtMillis = startedAtMillis;
         this.endedAtMillis = null;
+        this.userId = userId;
     }
 }
