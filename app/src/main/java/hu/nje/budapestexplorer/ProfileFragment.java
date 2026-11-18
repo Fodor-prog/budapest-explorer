@@ -230,9 +230,37 @@ public class ProfileFragment extends Fragment {
                             "Útvonal megtekintése",
                             (dialog, which) -> openWalkOnMap(walk)
                     )
+                    .setNeutralButton(
+                            "Séta törlése",
+                            (dialog, which) -> confirmDeleteWalk(walk)
+                    )
                     .setNegativeButton("Bezárás", null)
                     .show();
         });
+    }
+
+    private void confirmDeleteWalk(WalkEntity walk) {
+        if (!isAdded() || walkRepository == null) {
+            return;
+        }
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Séta törlése")
+                .setMessage(
+                        "Biztosan törlöd ezt a sétát és a hozzá tartozó GPS-pontokat?"
+                )
+                .setNegativeButton("Mégse", null)
+                .setPositiveButton("Törlés", (dialog, which) ->
+                        walkRepository.deleteWalk(walk.id, () -> {
+                            if (!isAdded()) {
+                                return;
+                            }
+
+                            showMessage("A séta törölve.");
+                            loadWalks();
+                        })
+                )
+                .show();
     }
 
     private void openWalkOnMap(WalkEntity walk) {
@@ -270,3 +298,4 @@ public class ProfileFragment extends Fragment {
         super.onDestroyView();
     }
 }
+

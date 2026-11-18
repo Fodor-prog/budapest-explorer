@@ -32,4 +32,8 @@ public interface WalkDao {
                     "ORDER BY startedAtMillis DESC"
     )
     List<WalkEntity> getWalksForUser(Long userId);
+
+    @Query("DELETE FROM walks WHERE id = :walkId")
+    void deleteWalkById(long walkId);
 }
+

@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
-
 public class WalkRepository {
 
     private static final ExecutorService databaseExecutor =
@@ -108,4 +107,19 @@ public class WalkRepository {
             );
         });
     }
+
+    public void deleteWalk(
+            long walkId,
+            Runnable onWalkDeleted
+    ) {
+        databaseExecutor.execute(() -> {
+            database.walkDao().deleteWalkById(walkId);
+
+            if (onWalkDeleted != null) {
+                mainThreadHandler.post(onWalkDeleted);
+            }
+        });
+    }
 }
+
+
