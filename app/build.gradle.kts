@@ -49,9 +49,10 @@ dependencies {
 
     implementation("org.maplibre.gl:android-sdk:13.7.1")
 
-    // Room adatbázis Java-projekthez
     implementation("androidx.room:room-runtime:2.8.5")
     annotationProcessor("androidx.room:room-compiler:2.8.5")
+
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)

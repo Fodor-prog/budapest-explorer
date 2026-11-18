@@ -1,49 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
     tools:context=".ProfileFragment">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+    <TextView
+        android:id="@+id/textProfileTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="Profil"
+        android:textColor="#29252F"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/textProfileDescription"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Jelentkezz be, vagy hozz létre egy új fiókot."
+        android:textColor="#5F5A66"
+        android:textSize="16sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/textProfileTitle" />
+
+    <Button
+        android:id="@+id/button_open_login"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="Bejelentkezés"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/textProfileDescription" />
+
+    <Button
+        android:id="@+id/button_open_register"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Regisztráció"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/button_open_login" />
+
+    <TextView
+        android:id="@+id/textSavedWalksTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Mentett séták"
+        android:textColor="#29252F"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/button_open_register" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerWalks"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/textSavedWalksTitle" />
+
+    <TextView
+        android:id="@+id/textNoSavedWalks"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:gravity="center"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:text="Még nincs elmentett sétád."
+        android:textColor="#77717E"
+        android:textSize="15sp"
+        app:layout_constraintBottom_toBottomOf="@id/recyclerWalks"
+        app:layout_constraintEnd_toEndOf="@id/recyclerWalks"
+        app:layout_constraintStart_toStartOf="@id/recyclerWalks"
+        app:layout_constraintTop_toTopOf="@id/recyclerWalks" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="Profil"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:text="Jelentkezz be, vagy hozz létre egy új fiókot."
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/button_open_login"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:text="Bejelentkezés" />
-
-        <Button
-            android:id="@+id/button_open_register"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Regisztráció" />
-
-    </LinearLayout>
-
-</ScrollView>
-
+</androidx.constraintlayout.widget.ConstraintLayout>
