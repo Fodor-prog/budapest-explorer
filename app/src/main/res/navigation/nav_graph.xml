@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/nav_graph"
     app:startDestination="@id/mapFragment">
@@ -48,40 +49,6 @@
         <action
             android:id="@+id/action_loginFragment_to_profileFragment"
             app:destination="@id/profileFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/registerFragment"
-        android:name="hu.nje.budapestexplorer.RegisterFragment"
-        android:label="Regisztráció">
-
-        <action
-            android:id="@+id/action_registerFragment_to_loginFragment"
-            app:destination="@id/loginFragment" />
-
-        <action
-            android:id="@+id/action_registerFragment_to_profileFragment"
-            app:destination="@id/profileFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/streetDetailFragment"
-        android:name="hu.nje.budapestexplorer.StreetDetailFragment"
-        android:label="Utca részletei">
-
-        <action
-            android:id="@+id/action_streetDetailFragment_to_profileFragment"
-            app:destination="@id/profileFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/loginFragment"
-        android:name="hu.nje.budapestexplorer.LoginFragment"
-        android:label="Belépés">
-
-        <action
-            android:id="@+id/action_loginFragment_to_registerFragment"
-            app:destination="@id/registerFragment" />
 
         <action
             android:id="@+id/action_loginFragment_to_mapFragment"
@@ -98,8 +65,22 @@
             app:destination="@id/loginFragment" />
 
         <action
+            android:id="@+id/action_registerFragment_to_profileFragment"
+            app:destination="@id/profileFragment" />
+
+        <action
             android:id="@+id/action_registerFragment_to_mapFragment"
             app:destination="@id/mapFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/streetDetailFragment"
+        android:name="hu.nje.budapestexplorer.StreetDetailFragment"
+        android:label="Utca részletei">
+
+        <action
+            android:id="@+id/action_streetDetailFragment_to_profileFragment"
+            app:destination="@id/profileFragment" />
     </fragment>
 
 </navigation>
