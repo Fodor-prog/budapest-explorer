@@ -67,6 +67,21 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/textExploredStreetCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Bejárt utcák: 0 / 0"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/textExploredPercentage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Budapest felfedezve: 0,00%" />
+
+        <TextView
             android:id="@+id/textLatestCoordinates"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -77,5 +92,3 @@
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
-
-

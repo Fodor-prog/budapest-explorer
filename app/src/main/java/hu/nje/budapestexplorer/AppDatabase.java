@@ -12,9 +12,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
         entities = {
                 WalkEntity.class,
                 GpsPointEntity.class,
-                UserEntity.class
+                UserEntity.class,
+                ExploredStreetEntity.class
         },
-        version = 3,
+        version = 4,
         exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -59,11 +60,35 @@ public abstract class AppDatabase extends RoomDatabase {
                 }
             };
 
+    private static final Migration MIGRATION_3_4 =
+            new Migration(3, 4) {
+                @Override
+                public void migrate(SupportSQLiteDatabase database) {
+                    database.execSQL(
+                            "CREATE TABLE IF NOT EXISTS `explored_streets` (" +
+                                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                                    "`ownerKey` TEXT NOT NULL, " +
+                                    "`streetId` TEXT NOT NULL, " +
+                                    "`streetName` TEXT NOT NULL, " +
+                                    "`discoveredAtMillis` INTEGER NOT NULL" +
+                                    ")"
+                    );
+
+                    database.execSQL(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                                    "`index_explored_streets_ownerKey_streetId` " +
+                                    "ON `explored_streets` (`ownerKey`, `streetId`)"
+                    );
+                }
+            };
+
     public abstract WalkDao walkDao();
 
     public abstract GpsPointDao gpsPointDao();
 
     public abstract UserDao userDao();
+
+    public abstract ExploredStreetDao exploredStreetDao();
 
     public static AppDatabase getInstance(Context context) {
         if (instance == null) {
@@ -76,7 +101,8 @@ public abstract class AppDatabase extends RoomDatabase {
                             )
                             .addMigrations(
                                     MIGRATION_1_2,
-                                    MIGRATION_2_3
+                                    MIGRATION_2_3,
+                                    MIGRATION_3_4
                             )
                             .build();
                 }
