@@ -1,12 +1,14 @@
 package hu.nje.budapestexplorer;
 
 import android.Manifest;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,7 +25,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
-import androidx.lifecycle.Lifecycle;
 
 import org.maplibre.android.MapLibre;
 import org.maplibre.android.camera.CameraPosition;
@@ -44,8 +45,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -66,8 +65,6 @@ public class MapFragment extends Fragment {
             new Locale("hu", "HU");
 
     private final List<Location> recordedLocations = new ArrayList<>();
-    private final Set<String> queuedStreetKeys =
-            ConcurrentHashMap.newKeySet();
     private final Handler mainThreadHandler =
             new Handler(Looper.getMainLooper());
 
@@ -76,7 +73,6 @@ public class MapFragment extends Fragment {
     private Style mapStyle;
     private GeoJsonSource pointsSource;
     private GeoJsonSource routeSource;
-    private LocationManager locationManager;
     private WalkRepository walkRepository;
     private UserRepository userRepository;
     private StreetDataRepository streetDataRepository;
@@ -99,6 +95,13 @@ public class MapFragment extends Fragment {
     private boolean isCreatingWalk = false;
     private boolean isViewingSavedWalk = false;
     private long activeWalkId = -1L;
+    private boolean trackingReceiverRegistered;
+
+    private final ActivityResultLauncher<String> notificationPermissionLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.RequestPermission(),
+                    permissionGranted -> startWalk()
+            );
 
     private final ActivityResultLauncher<String[]> locationPermissionLauncher =
             registerForActivityResult(
@@ -106,59 +109,26 @@ public class MapFragment extends Fragment {
                     this::onLocationPermissionResult
             );
 
-    private final LocationListener locationListener =
-            new LocationListener() {
+    private final BroadcastReceiver trackingUpdateReceiver =
+            new BroadcastReceiver() {
                 @Override
-                public void onLocationChanged(@NonNull Location location) {
-                    Location savedLocation = new Location(location);
-                    recordedLocations.add(savedLocation);
-
-                    if (walkRepository != null && activeWalkId >= 0) {
-                        walkRepository.addGpsPoint(
-                                activeWalkId,
-                                savedLocation.getLatitude(),
-                                savedLocation.getLongitude(),
-                                savedLocation.getTime()
-                        );
+                public void onReceive(
+                        Context context,
+                        Intent intent
+                ) {
+                    if (intent == null || !isAdded()) {
+                        return;
                     }
 
-                    recognizeStreet(savedLocation);
-                    updateLocationTexts(savedLocation);
-                    updateMapWithRecordedLocations();
+                    String action = intent.getAction();
 
-                    if (recordedLocations.size() == 1
-                            && mapLibreMap != null) {
-                        mapLibreMap.setCameraPosition(
-                                new CameraPosition.Builder()
-                                        .target(new LatLng(
-                                                savedLocation.getLatitude(),
-                                                savedLocation.getLongitude()
-                                        ))
-                                        .zoom(16)
-                                        .build()
-                        );
+                    if (WalkTrackingService.ACTION_STATE_CHANGED.equals(action)) {
+                        handleTrackingState(intent);
+                    } else if (WalkTrackingService.ACTION_LOCATION_RECORDED.equals(action)) {
+                        handleRecordedLocation(intent);
+                    } else if (WalkTrackingService.ACTION_STREET_PROGRESS_CHANGED.equals(action)) {
+                        updateStreetProgress();
                     }
-                }
-
-                @Override
-                public void onProviderEnabled(
-                        @NonNull String provider
-                ) {
-                }
-
-                @Override
-                public void onProviderDisabled(
-                        @NonNull String provider
-                ) {
-                }
-
-                @Override
-                @SuppressWarnings("deprecation")
-                public void onStatusChanged(
-                        String provider,
-                        int status,
-                        Bundle extras
-                ) {
                 }
             };
 
@@ -201,9 +171,6 @@ public class MapFragment extends Fragment {
                 view.findViewById(R.id.textExploredStreetCount);
         exploredPercentage =
                 view.findViewById(R.id.textExploredPercentage);
-
-        locationManager = (LocationManager) requireContext()
-                .getSystemService(Context.LOCATION_SERVICE);
 
         walkRepository = new WalkRepository(requireContext());
         userRepository = new UserRepository(requireContext());
@@ -328,7 +295,6 @@ public class MapFragment extends Fragment {
                                             calculator;
 
                                     updateStreetProgress();
-                                    recognizeRecordedLocations();
                                 });
                             });
                         } catch (RejectedExecutionException ignored) {
@@ -367,69 +333,6 @@ public class MapFragment extends Fragment {
                 "Az utcaadatok betöltése nem sikerült.",
                 Toast.LENGTH_LONG
         ).show();
-    }
-
-    private void recognizeRecordedLocations() {
-        if (streetCoverageCalculator == null) {
-            return;
-        }
-
-        List<Location> locationsToRecognize =
-                new ArrayList<>(recordedLocations);
-
-        for (Location location : locationsToRecognize) {
-            recognizeStreet(location);
-        }
-    }
-
-    private void recognizeStreet(Location location) {
-        StreetCoverageCalculator calculator =
-                streetCoverageCalculator;
-        ExploredStreetRepository repository =
-                exploredStreetRepository;
-        ExecutorService activeExecutor =
-                streetProcessingExecutor;
-        String ownerKey = currentOwnerKey;
-
-        if (calculator == null
-                || repository == null
-                || activeExecutor == null) {
-            return;
-        }
-
-        Location locationCopy = new Location(location);
-
-        try {
-            activeExecutor.execute(() -> {
-                StreetCoverageCalculator.StreetMatch streetMatch =
-                        calculator.findNearestStreet(locationCopy);
-
-                if (streetMatch == null) {
-                    return;
-                }
-
-                String queuedKey =
-                        ownerKey + "|" + streetMatch.getStreetId();
-
-                if (!queuedStreetKeys.add(queuedKey)) {
-                    return;
-                }
-
-                repository.saveExploredStreet(
-                        ownerKey,
-                        streetMatch.getStreetId(),
-                        streetMatch.getStreetName(),
-                        newlySaved -> {
-                            if (!isAdded()) {
-                                return;
-                            }
-
-                            updateStreetProgress();
-                        }
-                );
-            });
-        } catch (RejectedExecutionException ignored) {
-        }
     }
 
     private void updateStreetProgress() {
@@ -489,7 +392,7 @@ public class MapFragment extends Fragment {
 
     private void requestLocationPermission() {
         if (hasFineLocationPermission()) {
-            startWalk();
+            requestNotificationPermission();
             return;
         }
 
@@ -509,7 +412,7 @@ public class MapFragment extends Fragment {
         );
 
         if (fineLocationGranted) {
-            startWalk();
+            requestNotificationPermission();
         } else {
             Toast.makeText(
                     requireContext(),
@@ -517,6 +420,21 @@ public class MapFragment extends Fragment {
                     Toast.LENGTH_LONG
             ).show();
         }
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermissionLauncher.launch(
+                    Manifest.permission.POST_NOTIFICATIONS
+            );
+            return;
+        }
+
+        startWalk();
     }
 
     private boolean hasFineLocationPermission() {
@@ -527,123 +445,257 @@ public class MapFragment extends Fragment {
     }
 
     private void startWalk() {
-        if (locationManager == null) {
-            trackingStatus.setText(
-                    "A helymeghatározás nem érhető el."
-            );
+        if (isTracking || isCreatingWalk || walkRepository == null) {
             return;
         }
 
-        if (walkRepository == null || isTracking || isCreatingWalk) {
-            return;
-        }
+        isViewingSavedWalk = false;
+        clearPreviousRoute();
+        recordedLocations.clear();
+        activeWalkId = -1L;
+        updatePointCount();
 
-        WalkRepository repository = walkRepository;
-
-        Long userId = null;
-
-        if (userRepository != null) {
-            long loggedInUserId =
-                    userRepository.getLoggedInUserId();
-
-            if (loggedInUserId >= 0) {
-                userId = loggedInUserId;
-            }
-        }
+        long userId = userRepository == null
+                ? -1L
+                : userRepository.getLoggedInUserId();
 
         isCreatingWalk = true;
         trackingStatus.setText("Séta előkészítése...");
         updateButtonStates();
 
-        repository.createWalk(
-                System.currentTimeMillis(),
-                userId,
-                walkId -> {
-                    isCreatingWalk = false;
-
-                    if (!isAdded()
-                            || !getLifecycle()
-                            .getCurrentState()
-                            .isAtLeast(Lifecycle.State.STARTED)) {
-                        repository.finishWalk(
-                                walkId,
-                                System.currentTimeMillis()
-                        );
-                        updateButtonStates();
-                        return;
-                    }
-
-                    activeWalkId = walkId;
-                    isViewingSavedWalk = false;
-                    startGpsUpdates();
-                }
-        );
-    }
-
-    private void startGpsUpdates() {
-        clearPreviousRoute();
-        recordedLocations.clear();
-        updatePointCount();
+        Intent trackingIntent = new Intent(
+                requireContext(),
+                WalkTrackingService.class
+        )
+                .setAction(WalkTrackingService.ACTION_START)
+                .putExtra(
+                        WalkTrackingService.EXTRA_OWNER_KEY,
+                        currentOwnerKey
+                )
+                .putExtra(
+                        WalkTrackingService.EXTRA_USER_ID,
+                        userId
+                );
 
         try {
-            locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    3000L,
-                    5f,
-                    locationListener
-            );
-
-            isTracking = true;
-            trackingStatus.setText(
-                    "Séta rögzítése folyamatban..."
-            );
-            updateButtonStates();
-
-        } catch (SecurityException exception) {
-            isTracking = false;
-            finishActiveWalk();
-            trackingStatus.setText(
-                    "A GPS-engedély nem érhető el."
-            );
-
-            Toast.makeText(
+            ContextCompat.startForegroundService(
                     requireContext(),
-                    "A GPS használatához engedélyezd a helyhozzáférést.",
-                    Toast.LENGTH_LONG
-            ).show();
-
+                    trackingIntent
+            );
+        } catch (IllegalStateException | SecurityException exception) {
+            isCreatingWalk = false;
+            trackingStatus.setText(
+                    "Nem sikerült elindítani a séta rögzítését."
+            );
             updateButtonStates();
         }
     }
 
     private void stopWalk() {
-        stopLocationUpdates();
-        finishActiveWalk();
+        if (!isTracking && !isCreatingWalk) {
+            return;
+        }
 
-        trackingStatus.setText(
-                "A séta rögzítése leállt. A rögzített pontok: "
-                        + recordedLocations.size()
-        );
+        Intent stopIntent = new Intent(
+                requireContext(),
+                WalkTrackingService.class
+        ).setAction(WalkTrackingService.ACTION_STOP);
+
+        requireContext().startService(stopIntent);
+        trackingStatus.setText("A séta leállítása...");
+        stopButton.setEnabled(false);
     }
 
-    private void finishActiveWalk() {
-        if (walkRepository != null && activeWalkId >= 0) {
-            walkRepository.finishWalk(
-                    activeWalkId,
-                    System.currentTimeMillis()
-            );
+    private void handleTrackingState(Intent intent) {
+        isTracking = intent.getBooleanExtra(
+                WalkTrackingService.EXTRA_IS_TRACKING,
+                false
+        );
 
+        isCreatingWalk = intent.getBooleanExtra(
+                WalkTrackingService.EXTRA_IS_CREATING_WALK,
+                false
+        );
+
+        long serviceWalkId = intent.getLongExtra(
+                WalkTrackingService.EXTRA_WALK_ID,
+                -1L
+        );
+
+        int servicePointCount = intent.getIntExtra(
+                WalkTrackingService.EXTRA_POINT_COUNT,
+                0
+        );
+
+        if (!isViewingSavedWalk && serviceWalkId >= 0) {
+            boolean pointsNeedReload = activeWalkId != serviceWalkId
+                    || recordedLocations.size() != servicePointCount;
+
+            activeWalkId = serviceWalkId;
+
+            if (pointsNeedReload) {
+                loadRecordedWalkPoints(serviceWalkId);
+            }
+        } else if (!isViewingSavedWalk
+                && !isTracking
+                && !isCreatingWalk) {
             activeWalkId = -1L;
         }
-    }
 
-    private void stopLocationUpdates() {
-        if (locationManager != null) {
-            locationManager.removeUpdates(locationListener);
+        String status = intent.getStringExtra(
+                WalkTrackingService.EXTRA_STATUS
+        );
+
+        if (status != null && trackingStatus != null) {
+            trackingStatus.setText(status);
+        } else if (isTracking && trackingStatus != null) {
+            trackingStatus.setText(
+                    "Séta rögzítése folyamatban..."
+            );
         }
 
-        isTracking = false;
         updateButtonStates();
+    }
+
+    private void handleRecordedLocation(Intent intent) {
+        if (isViewingSavedWalk) {
+            return;
+        }
+
+        long serviceWalkId = intent.getLongExtra(
+                WalkTrackingService.EXTRA_WALK_ID,
+                -1L
+        );
+
+        if (serviceWalkId < 0
+                || (activeWalkId >= 0 && activeWalkId != serviceWalkId)) {
+            return;
+        }
+
+        activeWalkId = serviceWalkId;
+        isTracking = true;
+        isCreatingWalk = false;
+
+        Location location;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            location = intent.getParcelableExtra(
+                    WalkTrackingService.EXTRA_LOCATION,
+                    Location.class
+            );
+        } else {
+            location = intent.getParcelableExtra(
+                    WalkTrackingService.EXTRA_LOCATION
+            );
+        }
+
+        int servicePointCount = intent.getIntExtra(
+                WalkTrackingService.EXTRA_POINT_COUNT,
+                0
+        );
+
+        if (location != null
+                && recordedLocations.size() < servicePointCount) {
+            recordedLocations.add(new Location(location));
+            updateLocationTexts(location);
+            updateButtonStates();
+
+            if (recordedLocations.size() == 1
+                    && mapLibreMap != null) {
+                mapLibreMap.setCameraPosition(
+                        new CameraPosition.Builder()
+                                .target(new LatLng(
+                                        location.getLatitude(),
+                                        location.getLongitude()
+                                ))
+                                .zoom(16)
+                                .build()
+                );
+            }
+
+            updateMapWithRecordedLocations();
+        }
+    }
+
+    private void loadRecordedWalkPoints(long walkId) {
+        if (walkRepository == null) {
+            return;
+        }
+
+        walkRepository.getPointsForWalk(walkId, points -> {
+            if (!isAdded()
+                    || isViewingSavedWalk
+                    || activeWalkId != walkId) {
+                return;
+            }
+
+            recordedLocations.clear();
+
+            if (points != null) {
+                for (GpsPointEntity savedPoint : points) {
+                    Location location = new Location("active_walk");
+                    location.setLatitude(savedPoint.latitude);
+                    location.setLongitude(savedPoint.longitude);
+                    location.setTime(savedPoint.recordedAtMillis);
+                    recordedLocations.add(location);
+                }
+            }
+
+            updatePointCount();
+
+            if (!recordedLocations.isEmpty()) {
+                Location lastLocation = recordedLocations.get(
+                        recordedLocations.size() - 1
+                );
+                updateCoordinatesText(lastLocation);
+            }
+
+            updateMapWithRecordedLocations();
+        });
+    }
+
+    private void registerTrackingReceiver() {
+        if (trackingReceiverRegistered) {
+            return;
+        }
+
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(
+                WalkTrackingService.ACTION_STATE_CHANGED
+        );
+        intentFilter.addAction(
+                WalkTrackingService.ACTION_LOCATION_RECORDED
+        );
+        intentFilter.addAction(
+                WalkTrackingService.ACTION_STREET_PROGRESS_CHANGED
+        );
+
+        ContextCompat.registerReceiver(
+                requireContext(),
+                trackingUpdateReceiver,
+                intentFilter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+        );
+
+        trackingReceiverRegistered = true;
+    }
+
+    private void unregisterTrackingReceiver() {
+        if (!trackingReceiverRegistered) {
+            return;
+        }
+
+        requireContext().unregisterReceiver(trackingUpdateReceiver);
+        trackingReceiverRegistered = false;
+    }
+
+    private void requestTrackingServiceState() {
+        Intent stateIntent = new Intent(
+                requireContext(),
+                WalkTrackingService.class
+        ).setAction(WalkTrackingService.ACTION_GET_STATE);
+
+        requireContext().startService(stateIntent);
     }
 
     private void updateButtonStates() {
@@ -735,7 +787,6 @@ public class MapFragment extends Fragment {
             }
 
             updatePointCount();
-            recognizeRecordedLocations();
 
             if (recordedLocations.isEmpty()) {
                 trackingStatus.setText(
@@ -883,6 +934,9 @@ public class MapFragment extends Fragment {
         if (mapView != null) {
             mapView.onStart();
         }
+
+        registerTrackingReceiver();
+        requestTrackingServiceState();
     }
 
     @Override
@@ -908,16 +962,7 @@ public class MapFragment extends Fragment {
 
     @Override
     public void onStop() {
-        if (isTracking) {
-            stopLocationUpdates();
-            finishActiveWalk();
-
-            if (trackingStatus != null) {
-                trackingStatus.setText(
-                        "A rögzítés leállt, mert elhagytad a Térkép képernyőt."
-                );
-            }
-        }
+        unregisterTrackingReceiver();
 
         if (mapView != null) {
             mapView.onStop();
@@ -948,8 +993,7 @@ public class MapFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
-        stopLocationUpdates();
-        finishActiveWalk();
+        unregisterTrackingReceiver();
 
         if (streetProcessingExecutor != null) {
             streetProcessingExecutor.shutdownNow();
@@ -974,7 +1018,6 @@ public class MapFragment extends Fragment {
         exploredStreetCount = null;
         exploredPercentage = null;
 
-        locationManager = null;
         walkRepository = null;
         userRepository = null;
         streetDataRepository = null;
